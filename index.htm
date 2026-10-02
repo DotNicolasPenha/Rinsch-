@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fisch v6.8 - Skull & Abyss Update</title>
+<style>
+:root{--bg:#0f0f0f;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f0f0f}}
+:root[data-theme="dark"]{--bg:#0f0f0f}
+html,body{height:100%;margin:0}
+body{background:var(--bg);display:flex;align-items:center;justify-content:center;overflow:hidden;touch-action:none}
+canvas{display:block;width:min(100vw,calc((100vh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px)) * 16 / 9));height:auto;aspect-ratio:16/9;user-select:none;-webkit-user-select:none;touch-action:none}
+</style>
+</head>
+<body>
+<canvas id="c" width="1280" height="720"></canvas>
+<script>
+const SW=1280,SH=720,WW=5400,WH=4000;
+const cv=document.getElementById('c'),g=cv.getContext('2d');
+const k=(r,b,c)=>`rgb(${r},${b},${c})`;
+const OCEAN=k(15,75,130),SAND=k(222,184,135),DGRAY=k(35,35,45),WHITE=k(255,255,255),BLACK=k(15,15,15),GRAY=k(120,120,120),
+GOLD=k(241,196,15),YELLOW=k(255,235,59),CYAN=k(0,230,240),PURPLE=k(155,89,182),GREEN=k(46,204,113),RED=k(231,76,60),ORANGE=k(230,126,34);
+const R=(x,y,w,h)=>({x,y,w,h});
+const hit=(a,b)=>a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y;
+const inf=(r,dx,dy)=>R(r.x-dx/2,r.y-dy/2,r.w+dx,r.h+dy);
+const pt=(r,m)=>m.x>=r.x&&m.x<r.x+r.w&&m.y>=r.y&&m.y<r.y+r.h;
+const rnd=(a,b)=>a+Math.random()*(b-a),ri=(a,b)=>Math.floor(rnd(a,b+1)),pick=a=>a[Math.floor(Math.random()*a.length)];
+const now=()=>performance.now();
+
+// ---------- DADOS ----------
+const WEATHER={Ensolarado:{luck:1.0,color:YELLOW},Chuvoso:{luck:1.3,color:k(52,152,219)},Neblina:{luck:1.25,color:k(180,180,200)},Tempestade:{luck:1.8,color:PURPLE},Eclipse:{luck:5.0,color:RED}};
+const RI={
+ "Comum":{chance:42,speed:3.0,price:10,xp:40,color:k(190,190,190)},
+ "Incomum":{chance:26,speed:4.2,price:25,xp:95,color:GREEN},
+ "Raro":{chance:16,speed:5.5,price:70,xp:220,color:k(52,152,219)},
+ "Épico":{chance:9,speed:7.0,price:180,xp:550,color:PURPLE},
+ "Lendário":{chance:4,speed:8.8,price:500,xp:1600,color:GOLD},
+ "Mítico":{chance:2,speed:10.5,price:1600,xp:4500,color:k(233,30,99)},
+ "SECRETO":{chance:1,speed:12.5,price:5000,xp:15000,color:RED},
+ "Divina":{chance:0,speed:13.5,price:25000,xp:55000,color:k(8,168,163)}};
+const MASTER={name:"VARA MASTERLINE",price:0,bar_size:378,luck:33.3,req_level:100,progress_mult:4.0,instant_bite:true,resilience:77,color:k(255,0,255),decor:"masterline"};
+const rd=(name,price,bar_size,luck,req_level,resilience,color,decor)=>({name,price,bar_size,luck,req_level,resilience,color,decor});
+const F=(Comum,Incomum,Raro,Épico,Lendário,Mítico,SECRETO)=>({Comum,Incomum,Raro,Épico,Lendário,Mítico,SECRETO});
+const L=(name,req_level,color,r,fish)=>({name,req_level,color,rect:R(...r),fish});
+const ISL={
+inicial:{name:"Ilha Inicial",rect:R(200,200,700,600),color:k(34,139,34),border:SAND,vendor:R(420,280,50,50),rodnpc:R(540,280,50,50),boat:R(660,280,50,50),money_buff:1.1,
+ rods:{bambu:rd("Vara de Bambu",0,80,1.0,1,0,k(139,90,43),"bambu"),fibra:rd("Vara de Fibra de Vidro",665,95,1.25,2,5,k(240,240,240),"fibra"),
+  ouro:rd("Vara de Ouro Reluzente",3150,115,1.6,4,10,k(255,215,0),"ouro"),mitica:rd("Vara Mítica do Mar",10500,135,2.2,7,15,k(0,150,255),"mitica")},
+ lakes:{Lagoa:L("Lagoa Tranquila",1,k(30,144,255),[260,420,220,180],F(["Tilápia","Lambari","Sardinha"],["Carpa Dourada","Tucunaré"],["Tambaqui","Pirarucu"],["Peixe-Dourado Gigante"],["Arowana Anciã"],["Guardião da Lagoa"],["Anomalia Fluorescente"])),
+  Vulcão:L("Poço Vulcânico",6,k(200,50,20),[580,420,220,180],F(["Cascudo Magmático"],["Peixe-Pedra Incandescente"],["Salamandra de Fogo"],["Anguila de Lava"],["Fênix Aquática"],["Dragão Magmático"],["Coração do Vulcão"]))}},
+pedra:{name:"Ilha da Pedra",rect:R(1800,200,800,700),color:k(100,100,105),border:k(60,60,65),vendor:R(2000,300,50,50),rodnpc:R(2150,300,50,50),money_buff:1.5,
+ rods:{granito:rd("Vara de Granito Sólido",24500,140,2.8,10,20,k(120,120,130),"granito"),basalto:rd("Vara de Basalto Vulcânico",52500,150,3.4,15,25,k(45,45,50),"basalto")},
+ lakes:{BasePedra:L("Lago da Base da Pedra",10,k(70,130,180),[1880,450,280,200],F(["Cascudo das Pedras","Carpa Rochosa"],["Bagre das Cavernas","Truta Escondida"],["Peixe Golem","Trilobita Fossilizado"],["Guardião de Granito"],["Monolito Aquático"],["Sirenita de Pedra"],["Ancestral Geodésico"])),
+  PicoPedra:L("Lago Do Pico da Pedra",15,k(100,180,220),[2240,450,280,200],F(["Truta Montanhesa","Salmão das Alturas"],["Peixe Vento de Pedra"],["Cristal de Rocha Vivo"],["Águia dos Mares da Montanha"],["Titã dos Picos"],["Dragão dos Despenhadeiros"],["Divindade do Cume"]))}},
+cristais:{name:"Ilha dos Cristais",rect:R(300,1800,850,750),color:k(45,20,70),border:k(180,100,255),vendor:R(500,1900,50,50),rodnpc:R(650,1900,50,50),money_buff:2.2,
+ rods:{prismatica:rd("Vara Prismática Radiante",126000,160,4.2,20,40,k(255,105,180),"prismatica"),nucleo_cristal:rd("Vara Núcleo de Cristal",280000,175,5.2,25,20,k(148,0,211),"nucleo_cristal")},
+ lakes:{LagoCalmo:L("Lago Calmo",20,k(120,220,230),[380,2080,300,220],F(["Peixe Esmeralda","Quartzo Rosa Natante"],["Safira Aquática"],["Lotus de Cristal Bioluminescente"],["Arraia Prismática"],["Dragão de Cristal Calmo"],["Serafim de Ametista"],["Singularidade Prismática"])),
+  LagoCristalizado:L("Lago Cristalizado",25,k(200,130,255),[740,2080,300,220],F(["Diamante Bruto Nadador"],["Peixe Espelho Multifacetado"],["Espectro Diamantado"],["Quimera de Cristal"],["Lorde dos Cristais"],["Fênix de Diamante"],["O Coração Prisma"]))}},
+marianas:{name:"Ilha Fossa das Marianas",rect:R(2000,1800,950,850),color:k(15,15,25),border:k(50,50,100),vendor:R(2200,1900,50,50),rodnpc:R(2350,1900,50,50),money_buff:3.2,
+ rods:{sombra_abissal:rd("Vara das Sombras Abissais",378000,190,6.8,30,30,k(20,20,35),"sombra_abissal"),vazio_hadal:rd("Vara do Vazio Hadal",1050000,210,7.5,40,45,k(10,0,20),"vazio_hadal")},
+ lakes:{LagoAbyssal:L("Lago Abyssal",30,k(15,30,60),[2080,2100,340,250],F(["Peixe Lanterninha Abissal"],["Enguia das Sombras"],["Lula Colossal Abissal"],["Devorador de Luz"],["Leviatã da Penumbra"],["Behemoth Abissal"],["O Espírito do Abismo"])),
+  LagoHadal:L("Lago Hadal",40,k(5,5,15),[2500,2100,340,250],F(["Peixe Escuridão Hadal"],["Anglerfish Ancestral"],["Hidra das Profundezas Hadais"],["Kraken Sem Fim"],["Titã do Vazio Hadal"],["Sultão das Trevas Aquáticas"],["A Singularidade Hadal"]))}},
+caveira:{name:"Ilha da Caveira",rect:R(4000,1800,950,850),color:k(40,35,45),border:k(120,30,30),vendor:R(4200,1900,50,50),rodnpc:R(4350,1900,50,50),money_buff:5.0,
+ rods:{esqueleto_maldito:rd("Vara do Esqueleto Maldito",1260000,225,9.0,50,10,k(180,180,180),"esqueleto_maldito"),ceifador_almas:rd("Ceifadeira de Almas",3150000,245,12.0,60,0,k(20,20,25),"ceifador_almas")},
+ lakes:{LagoOssos:L("Lago de Ossos",50,k(90,70,70),[4080,2100,340,250],F(["Piranha Esquelética"],["Carpa de Marfim"],["Tubarão Fantasma Ósseo"],["Serpente dos Túmulos"],["Guardião da Cripta"],["Lord dos Ossos Eternos"],["Fóssil Primordial Desperto"])),
+  LagoProfano:L("Lago Profano",60,k(30,10,20),[4500,2100,340,250],F(["Enguia Necrótica"],["Arraia Sangrenta"],["Espectro das Profundezas Cegas"],["Leviathan da Pira"],["Archdemon Aquático"],["Deus Caído do Lago Profano"],["A essência do Caos Sombrio"]))}}};
+const BOATS={pe:{name:"A Pé",price:0,speed:1.0},bote:{name:"Bote de Madeira",price:5000,speed:2.0},speedboat:{name:"Speedboat Ultra",price:60000,speed:4.0}};
+const BAITS={minhoca:{name:"Minhoca Comum",price:0,luck:1.0},camarao:{name:"Camarão Suculento",price:500,luck:1.4,pack:5},brilhante:{name:"Isca Mágica Brilhante",price:2000,luck:2.2,pack:3}};
+const allSpecies=()=>{const s=new Set();for(const i of Object.values(ISL))for(const l of Object.values(i.lakes))for(const r of Object.values(l.fish))r.forEach(n=>s.add(n));s.add("Eclipse Ancient Serpent");return s};
+const allRods=()=>{const s=new Set();for(const i of Object.values(ISL))Object.keys(i.rods).forEach(r=>s.add(r));return s};
+const rodData=key=>{if(key==="masterline")return MASTER;for(const i of Object.values(ISL))if(i.rods[key])return i.rods[key];return ISL.inicial.rods.bambu};
+const findRarity=sp=>{if(sp==="Eclipse Ancient Serpent")return"Divina";for(const i of Object.values(ISL))for(const l of Object.values(i.lakes))for(const[r,a]of Object.entries(l.fish))if(a.includes(sp))return r;return"Comum"};
+
+// ---------- ESTADO ----------
+const p={x:400,y:350,base:7,radius:16,coins:150,level:1,xp:0,xpNext:70,rod:"bambu",rods:["bambu"],boat:"pe",boats:["pe"],bait:"minhoca",baits:{camarao:0,brilhante:0},inv:[],best:{},inWater:false};
+let state="MENU",activeLake=null,activeIsland=null,waitTimer=0,caught=null;
+let weather="Ensolarado",weatherTimer=0,eclZone=null,eclMsg=0,eclGuar=false,isEcl=false;
+const TW=420;let fishPos=210,fishTarget=210,barPos=150,barVel=0,progress=30,curFish=null,perfect=true;
+let particles=[],ftexts=[],toastMsg="",toastTimer=0,bestPage=0,invScroll=0,dragInv=false,invY=0,favBtns=[],shopType=null,shopIsl=null;
+const cam={x:0,y:0};
+const joy={c:[110,SH-110],r:65,hr:28,active:false,id:null,pos:[110,SH-110],vec:[0,0]};
+const btnAction=R(SW-135,SH-135,105,105),btnInv=R(SW-250,12,110,36),btnBest=R(SW-130,12,115,36),btnPlay=R(530,400,220,65);
+let touchAction=false,hover={x:0,y:0};
+const keys=new Set(),ptrs=new Map();
+const pRect=(x=p.x,y=p.y)=>R(x-p.radius,y-p.radius,p.radius*2,p.radius*2);
+
+// ---------- SAVE ----------
+function save(){try{localStorage.setItem("fisch_save",JSON.stringify({x:p.x,y:p.y,coins:p.coins,level:p.level,xp:p.xp,xpNext:p.xpNext,rod:p.rod,rods:p.rods,boat:p.boat,boats:p.boats,bait:p.bait,baits:p.baits,inv:p.inv,best:p.best}))}catch(e){}}
+function load(){try{const d=JSON.parse(localStorage.getItem("fisch_save")||"null");if(!d)return;Object.assign(p,d);
+ p.inv.forEach(f=>{f.favorited=!!f.favorited;f.is_shiny=!!f.is_shiny;f.is_sparkling=!!f.is_sparkling});
+ for(const[n,f]of Object.entries(p.best))if(!f.rarity||!RI[f.rarity])f.rarity=findRarity(n)}catch(e){}}
+addEventListener("beforeunload",save);document.addEventListener("visibilitychange",()=>{if(document.hidden)save()});
+
+// ---------- UTIL ----------
+const toast=s=>{toastMsg=s;toastTimer=now()+3000};
+const ftext=(x,y,t,c)=>ftexts.push({x,y,t,c,life:40});
+const sparkle=(x,y,c,n=15)=>{for(let i=0;i<n;i++)particles.push({x,y,c,vx:rnd(-3,3),vy:rnd(-3,3),s:ri(3,7),life:ri(15,30)})};
+function addXp(a){p.xp+=a;ftext(p.x,p.y-30,`+${a} XP`,CYAN);while(p.xp>=p.xpNext){p.xp-=p.xpNext;p.level++;p.xpNext=Math.floor(p.xpNext*1.175);toast(` SUBIU PARA O NÍVEL ${p.level}! `);sparkle(p.x,p.y,GOLD,20)}}
+function checkMaster(){
+ if(p.rods.includes("masterline"))return;
+ const sp=[...allSpecies()].every(s=>s in p.best),rods=[...allRods()].every(r=>p.rods.includes(r)),boats=Object.keys(BOATS).every(b=>p.boats.includes(b));
+ if(sp&&rods&&boats&&p.level>=100&&p.coins>=5000000){p.rods.push("masterline");p.rod="masterline";toast(" CONQUISTA SUPREMA! Você obteve a VARA MASTERLINE! ");sparkle(p.x,p.y,k(255,0,255),30);save()}}
+function onLand(r){for(const i of Object.values(ISL))if(hit(i.rect,r)&&!Object.values(i.lakes).some(l=>hit(l.rect,r)))return true;return false}
+function move(dx,dy){
+ if(!dx&&!dy)return;
+ const sp=p.base*(p.boat!=="pe"?BOATS[p.boat].speed:1);
+ const nx=Math.max(20,Math.min(WW-20,p.x+dx*sp));
+ if(p.boat!=="pe"){p.x=nx}else if(onLand(pRect(nx,p.y)))p.x=nx;
+ const ny=Math.max(20,Math.min(WH-20,p.y+dy*sp));
+ if(p.boat!=="pe"){p.y=ny}else if(onLand(pRect(p.x,ny)))p.y=ny;
+ p.inWater=!onLand(pRect());
+}
+
+// ---------- CLIMA / ECLIPSE ----------
+function spawnEclipse(){
+ for(let i=0;i<150;i++){const c=R(ri(100,WW-500),ri(100,WH-500),400,400);if(!Object.values(ISL).some(s=>hit(c,inf(s.rect,100,100)))){eclZone=c;return}}
+ eclZone=R(1200,1200,400,400)}
+function changeWeather(n){
+ if(!n)n=pick(Object.keys(WEATHER).filter(w=>w!=="Eclipse"&&w!==weather));
+ weather=n;weatherTimer=now()+60000;
+ if(n==="Eclipse"){eclMsg=now()+10000;eclGuar=true;spawnEclipse();toast("UM SER DIVINO SURGIU NO OCEANO!")}
+ else{eclZone=null;eclGuar=false;isEcl=false;toast(` CLIMA MUDOU: ${n.toUpperCase()} (${WEATHER[n].luck}x Sorte)!`)}}
+
+// ---------- PESCA ----------
+function wchoice(items,w){let t=w.reduce((a,b)=>a+b,0),r=Math.random()*t;for(let i=0;i<items.length;i++){r-=w[i];if(r<=0)return items[i]}return items[items.length-1]}
+function getFish(lake){
+ const var2=()=>[Math.random()<0.01,Math.random()<0.03];
+ if(isEcl&&eclGuar){
+  eclGuar=false;const info=RI.Divina,[sh,sp]=var2();let pr=info.price;
+  if(activeIsland&&ISL[activeIsland])pr*=ISL[activeIsland].money_buff;
+  if(sh)pr*=2;if(sp)pr*=1.5;
+  return{name:"Eclipse Ancient Serpent",rarity:"Divina",weight:Math.round(rnd(250,800)*100)/100,price:Math.floor(pr),xp:info.xp,color:info.color,speed:info.speed,lake:"Oceano do Eclipse",favorited:false,is_shiny:sh,is_sparkling:sp}}
+ const rod=rodData(p.rod),luck=rod.luck*BAITS[p.bait].luck*WEATHER[weather].luck;
+ const rars=Object.keys(RI).filter(r=>r!=="Divina");
+ let av=rars.filter(r=>lake.fish[r]&&lake.fish[r].length>0);if(!av.length)av=["Comum"];
+ const w=av.map(r=>["Raro","Épico","Lendário","Mítico","SECRETO"].includes(r)?RI[r].chance*luck:RI[r].chance);
+ const rar=wchoice(av,w);
+ if(p.bait!=="minhoca"){p.baits[p.bait]=Math.max(0,p.baits[p.bait]-1);if(p.baits[p.bait]<=0){p.bait="minhoca";toast("Sua isca acabou! Voltando para Minhoca.")}}
+ const name=pick(lake.fish[rar]&&lake.fish[rar].length?lake.fish[rar]:["Peixe Abissal Misterioso"]);
+ const info=RI[rar],weight=Math.round(rnd(1,["Mítico","SECRETO"].includes(rar)?250:40)*100)/100;
+ let price=Math.floor(info.price*(weight/5)+info.price*0.2);
+ if(activeIsland&&ISL[activeIsland])price=Math.floor(price*ISL[activeIsland].money_buff);
+ const lv=lake.req_level||1,mult=lv>=50?1+lv*1.8:lv>=30?1+lv*1.2:1+lv*0.65;
+ const[sh,sp]=var2();let fp=price;if(sh)fp*=2;if(sp)fp*=1.5;
+ return{name,rarity:rar,weight,price:Math.floor(fp),xp:Math.floor(info.xp*mult),color:info.color,speed:info.speed,lake:lake.name,favorited:false,is_shiny:sh,is_sparkling:sp}}
+function startFishing(lake,isl,ecl=false){
+ if(state!=="EXPLORING")return;
+ if(!ecl&&p.level<lake.req_level){toast(`Requer Nível ${lake.req_level} para pescar aqui!`);return}
+ activeLake=lake;activeIsland=isl;isEcl=ecl;
+ if(rodData(p.rod).instant_bite)startMini();else{state="WAITING_BITES";waitTimer=now()+ri(1200,2800)}}
+function startMini(){
+ if(state!=="EXPLORING"&&state!=="WAITING_BITES")return;
+ state="MINIGAME";curFish=getFish(activeLake);perfect=true;fishPos=TW/2;
+ barPos=(TW-rodData(p.rod).bar_size)/2;barVel=0;progress=35;fishTarget=ri(20,TW-20)}
+const RMULT={"Lendário":0.7,"Mítico":0.4,"SECRETO":0.3,"Divina":0.25};
+function updMini(held){
+ if(state!=="MINIGAME"||!curFish)return;
+ const rod=rodData(p.rod),bs=rod.bar_size,rm=Math.max(0.05,1-(rod.resilience||0)/100);
+ if(Math.abs(fishPos-fishTarget)<15||Math.random()<0.05*rm)fishTarget=ri(20,TW-20);
+ fishPos+=(fishTarget>fishPos?1:-1)*curFish.speed*0.85*rm;
+ fishPos=Math.max(10,Math.min(TW-10,fishPos));
+ barVel+=held?3.2:-3.2;barVel=Math.max(-15,Math.min(15,barVel));barPos+=barVel;
+ if(barPos<0){barPos=0;barVel=0}else if(barPos>TW-bs){barPos=TW-bs;barVel=0}
+ const inZone=barPos<=fishPos&&fishPos<=barPos+bs,ps=1.4*(rod.progress_mult||1)*(RMULT[curFish.rarity]||1);
+ if(inZone){progress+=ps;if(Math.random()<0.2)particles.push({x:SW/2-TW/2+fishPos,y:SH/2,c:curFish.color,vx:rnd(-3,3),vy:rnd(-3,3),s:ri(3,7),life:10})}
+ else{progress-=0.8;perfect=false}
+ progress=Math.max(0,Math.min(100,progress));
+ if(progress>=100){
+  state="RESULT";
+  if(perfect){curFish.xp=Math.floor(curFish.xp*1.5);toast("CAPTURA PERFEITA! 1.5x XP!")}
+  caught=curFish;p.inv.push(curFish);addXp(curFish.xp);
+  const n=curFish.name;if(!p.best[n])p.best[n]={caught:0,max_weight:0,rarity:curFish.rarity};
+  p.best[n].caught++;p.best[n].max_weight=Math.max(p.best[n].max_weight,curFish.weight);p.best[n].rarity=curFish.rarity;
+  sparkle(p.x,p.y,curFish.color,25);checkMaster();save();isEcl=false}
+ else if(progress<=0){state="RESULT";caught=null;isEcl=false}}
+
+// ---------- INTERAÇÃO ----------
+function interact(){
+ if(["SHOP","INVENTORY","BESTIARY","RESULT"].includes(state)){if(state==="RESULT")caught=null;state="EXPLORING";return}
+ if(state!=="EXPLORING")return;
+ const pr=pRect();
+ if(weather==="Eclipse"&&eclZone&&hit(pr,eclZone)){
+  startFishing({name:"Linha Divina do Eclipse",req_level:1,color:RED,fish:{"Mítico":["Ser do Vazio"],"SECRETO":["Abismo Vivo"]}},null,true);return}
+ for(const[ik,isl]of Object.entries(ISL)){
+  for(const lake of Object.values(isl.lakes))if(hit(pr,inf(lake.rect,20,20))){startFishing(lake,ik);return}
+  if(hit(pr,inf(isl.vendor,30,30))){
+   if(!p.inv.length)toast("Você não tem peixes para vender!");
+   else{const un=p.inv.filter(f=>!f.favorited);
+    if(!un.length)toast("Todos os peixes estão favoritados e protegidos!");
+    else{const t=un.reduce((a,f)=>a+f.price,0);p.coins+=t;ftext(p.x,p.y-20,`+C$ ${t}`,GOLD);p.inv=p.inv.filter(f=>f.favorited);toast(`Vendeu ${un.length} peixes por C$ ${t}!`);checkMaster();save()}}
+   return}
+  if(hit(pr,inf(isl.rodnpc,30,30))){state="SHOP";shopType="rod";shopIsl=ik;return}
+  if(isl.boat&&hit(pr,inf(isl.boat,30,30))){state="SHOP";shopType="boat";shopIsl=ik;return}}}
+function shopClick(m){
+ const sx=SW/2-280,sy=SH/2-250;
+ if(pt(R(sx+515,sy+10,30,30),m)){state="EXPLORING";return}
+ if(shopType==="rod"){
+  let y=sy+65;
+  for(const[key,r]of Object.entries(ISL[shopIsl].rods)){
+   if(pt(R(sx+400,y+5,130,30),m)){
+    if(p.rods.includes(key)){p.rod=key;toast(`Equipou: ${r.name}`)}
+    else if(p.level<r.req_level)toast(`Requer Nível ${r.req_level}!`);
+    else if(p.coins>=r.price){p.coins-=r.price;p.rods.push(key);p.rod=key;toast(`Comprou e Equipou: ${r.name}`);checkMaster();save()}
+    else toast("Moedas insuficientes!");
+    return}
+   y+=50}
+  if(p.rods.includes("masterline")){if(pt(R(sx+400,y+5,130,30),m)){p.rod="masterline";toast("Equipou: VARA MASTERLINE");save();return}y+=50}
+  y+=40;
+  for(const[key,b]of Object.entries(BAITS)){
+   if(key==="minhoca")continue;
+   if(pt(R(sx+400,y+5,130,30),m)){
+    if(p.coins>=b.price){p.coins-=b.price;p.baits[key]+=b.pack;p.bait=key;toast(`Comprou ${b.name}!`);save()}else toast("Moedas insuficientes!");
+    return}
+   y+=50}
+ }else if(shopType==="boat"){
+  let y=sy+80;
+  for(const[key,b]of Object.entries(BOATS)){
+   if(pt(R(sx+400,y+5,130,35),m)){
+    if(p.boats.includes(key)){p.boat=key;toast(`Equipou veículo: ${b.name}`);save()}
+    else if(p.coins>=b.price){p.coins-=b.price;p.boats.push(key);p.boat=key;toast(`Adquiriu: ${b.name}!`);checkMaster();save()}
+    else toast("Moedas insuficientes!");
+    return}
+   y+=55}}}
+
+// ---------- ENTRADA ----------
+const invMax=()=>Math.max(0,p.inv.length-9);
+function startGame(){state="EXPLORING";weatherTimer=now()+60000}
+function click(m){
+ if(state==="MENU"){if(pt(btnPlay,m))startGame();return}
+ if(state==="INVENTORY"){
+  let used=false;
+  for(const[f,r]of favBtns)if(pt(r,m)){f.favorited=!f.favorited;toast(f.favorited?"Peixe favoritado!":"Peixe desfavoritado!");save();used=true;break}
+  if(!used&&pt(R(SW/2-230,SH/2-200,460,400),m)){dragInv=true;invY=m.y}
+  if(pt(R(SW/2-230+420,SH/2-200+10,30,30),m)||pt(btnInv,m)){state="EXPLORING";dragInv=false}
+ }else if(state==="SHOP")shopClick(m);
+ else if(state==="BESTIARY"){
+  const bx=SW/2-380,by=SH/2-230,bw=760,bh=460;
+  if(pt(R(bx+bw-40,by+10,30,30),m)||pt(btnBest,m))state="EXPLORING";
+  else if(pt(R(bx+20,by+bh-40,110,30),m))bestPage=Math.max(0,bestPage-1);
+  else if(pt(R(bx+bw-130,by+bh-40,110,30),m))bestPage=Math.min(Object.keys(ISL).length,bestPage+1);
+ }else if(state==="RESULT")interact();
+ else{if(pt(btnInv,m)){state="INVENTORY";invScroll=0}else if(pt(btnBest,m))state="BESTIARY";else if(pt(btnAction,m))interact()}}
+const mpos=e=>{const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)*SW/r.width,y:(e.clientY-r.top)*SH/r.height}};
+cv.addEventListener("pointerdown",e=>{e.preventDefault();cv.setPointerCapture(e.pointerId);const m=mpos(e);ptrs.set(e.pointerId,m);hover=m;click(m)});
+cv.addEventListener("pointermove",e=>{const m=mpos(e);hover=m;if(ptrs.has(e.pointerId))ptrs.set(e.pointerId,m);
+ if(state==="INVENTORY"&&dragInv){const dy=m.y-invY;if(Math.abs(dy)>25){const st=Math.floor(Math.abs(dy)/25);invScroll=dy>0?Math.max(0,invScroll-st):Math.min(invMax(),invScroll+st);invY=m.y}}});
+const up=e=>{ptrs.delete(e.pointerId);dragInv=false};
+cv.addEventListener("pointerup",up);cv.addEventListener("pointercancel",up);
+cv.addEventListener("wheel",e=>{e.preventDefault();if(state==="INVENTORY")invScroll=Math.max(0,Math.min(invMax(),invScroll+Math.sign(e.deltaY)))},{passive:false});
+cv.addEventListener("contextmenu",e=>e.preventDefault());
+addEventListener("keydown",e=>{
+ if(["Space","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.code))e.preventDefault();
+ keys.add(e.code);if(e.repeat)return;
+ if(state==="MENU"){if(e.code==="Space"||e.code==="Enter")startGame();return}
+ const busy=["MINIGAME","WAITING_BITES","RESULT"].includes(state);
+ if(e.code==="Space")interact();
+ else if((e.code==="KeyE"||e.code==="KeyI")&&!busy)state=state==="INVENTORY"?"EXPLORING":"INVENTORY";
+ else if(e.code==="KeyB"&&!busy)state=state==="BESTIARY"?"EXPLORING":"BESTIARY";
+ else if(e.code==="Escape")state="EXPLORING";
+ else if(state==="INVENTORY"){if(e.code==="ArrowUp")invScroll=Math.max(0,invScroll-1);else if(e.code==="ArrowDown")invScroll=Math.min(invMax(),invScroll+1)}});
+addEventListener("keyup",e=>keys.delete(e.code));
+addEventListener("blur",()=>keys.clear());
+
+function updJoy(){
+ let m=null;
+ if(joy.active){m=ptrs.get(joy.id);if(!m)joy.active=false}
+ else for(const[id,q]of ptrs)if(Math.hypot(q.x-joy.c[0],q.y-joy.c[1])<=joy.r+20){joy.active=true;joy.id=id;m=q;break}
+ if(joy.active&&m){
+  const dx=m.x-joy.c[0],dy=m.y-joy.c[1],d=Math.hypot(dx,dy);
+  if(d<=joy.r){joy.pos=[m.x,m.y];joy.vec=d>0?[dx/joy.r,dy/joy.r]:[0,0]}
+  else{const a=Math.atan2(dy,dx);joy.pos=[joy.c[0]+joy.r*Math.cos(a),joy.c[1]+joy.r*Math.sin(a)];joy.vec=[Math.cos(a),Math.sin(a)]}
+ }else{joy.active=false;joy.pos=[...joy.c];joy.vec=[0,0]}
+ touchAction=[...ptrs.values()].some(q=>pt(btnAction,q))}
+
+// ---------- ATUALIZAÇÃO ----------
+function tick(){
+ if(state==="MENU")return;
+ if(now()>=weatherTimer)Math.random()<0.001?changeWeather("Eclipse"):changeWeather();
+ updJoy();
+ if(state==="EXPLORING"){
+  let dx=(keys.has("KeyD")||keys.has("ArrowRight")?1:0)-(keys.has("KeyA")||keys.has("ArrowLeft")?1:0);
+  let dy=(keys.has("KeyS")||keys.has("ArrowDown")?1:0)-(keys.has("KeyW")||keys.has("ArrowUp")?1:0);
+  if(!dx&&!dy&&joy.active){dx=joy.vec[0];dy=joy.vec[1]}
+  move(dx,dy);
+  cam.x=Math.min(0,Math.max(-(WW-SW),-p.x+SW/2|0));cam.y=Math.min(0,Math.max(-(WH-SH),-p.y+SH/2|0));
+ }else if(state==="WAITING_BITES"){if(now()>=waitTimer)startMini()}
+ else if(state==="MINIGAME")updMini(keys.has("Space")||touchAction);
+ particles=particles.filter(q=>{q.x+=q.vx;q.y+=q.vy;return--q.life>0});
+ ftexts=ftexts.filter(q=>{q.y-=1.5;return--q.life>0})}
+
+// ---------- DESENHO ----------
+const T=(s,x,y,c,sz=17,al="left",b=0)=>{g.font=`${b?"bold ":""}${sz}px Arial,sans-serif`;g.fillStyle=c;g.textAlign=al;g.textBaseline="top";g.fillText(s,x,y)};
+const TC=(s,cx,cy,c,sz=17)=>{g.font=`${sz}px Arial,sans-serif`;g.fillStyle=c;g.textAlign="center";g.textBaseline="middle";g.fillText(s,cx,cy)};
+const rr=(x,y,w,h,r,f,s,lw=1)=>{g.beginPath();g.roundRect(x,y,w,h,r);if(f){g.fillStyle=f;g.fill()}if(s){g.strokeStyle=s;g.lineWidth=lw;g.stroke()}};
+const rb=(r,rad,f,s,lw)=>rr(r.x,r.y,r.w,r.h,rad,f,s,lw);
+const ci=(x,y,r,f,s,lw=1)=>{g.beginPath();g.arc(x,y,r,0,Math.PI*2);if(f){g.fillStyle=f;g.fill()}if(s){g.strokeStyle=s;g.lineWidth=lw;g.stroke()}};
+const el=(x,y,w,h,f,s,lw=1)=>{g.beginPath();g.ellipse(x+w/2,y+h/2,w/2,h/2,0,0,Math.PI*2);if(f){g.fillStyle=f;g.fill()}if(s){g.strokeStyle=s;g.lineWidth=lw;g.stroke()}};
+const ln=(a,b,c,d,col,w=1)=>{g.beginPath();g.moveTo(a,b);g.lineTo(c,d);g.strokeStyle=col;g.lineWidth=w;g.stroke()};
+const pg=(pts,f,s,lw=1)=>{g.beginPath();pts.forEach(([x,y],i)=>i?g.lineTo(x,y):g.moveTo(x,y));g.closePath();if(f){g.fillStyle=f;g.fill()}if(s){g.strokeStyle=s;g.lineWidth=lw;g.stroke()}};
+const cr=r=>R(r.x+cam.x,r.y+cam.y,r.w,r.h);
+const variant=f=>f.is_shiny&&f.is_sparkling?"[Shiny + Sparkling]":f.is_shiny?"[Shiny]":f.is_sparkling?"[Sparkling]":"";
+
+function drawPlayer(){
+ const cx=p.x+cam.x,cy=p.y+cam.y;
+ if(p.boat==="bote"){el(cx-24,cy-14,48,28,k(139,69,19));el(cx-24,cy-14,48,28,null,k(100,40,10),3)}
+ else if(p.boat==="speedboat"){const q=[[cx+28,cy],[cx-22,cy-16],[cx-18,cy],[cx-22,cy+16]];pg(q,WHITE);pg(q,null,RED,2)}
+ ci(cx,cy-8,9,k(255,220,177));ln(cx,cy,cx,cy+12,BLACK,3);
+ const rod=rodData(p.rod),col=rod.color,dec=rod.decor,tx=cx+24,ty=cy-18;
+ ln(cx,cy+2,tx,ty,col,3);
+ if(dec==="bambu"){ln(cx+8,cy-4,cx+12,cy-8,k(80,50,20),2);ci(tx,ty,2,k(50,30,10))}
+ else if(dec==="fibra")ci(tx,ty,3,CYAN);
+ else if(dec==="ouro")pg([[tx,ty-5],[tx+4,ty],[tx,ty+5],[tx-4,ty]],YELLOW);
+ else if(dec==="mitica"){ci(tx,ty,4,k(0,255,255));ci(tx,ty,2,WHITE)}
+ else if(dec==="granito"){g.fillStyle=k(160,160,160);g.fillRect(tx-3,ty-3,6,6)}
+ else if(dec==="basalto")pg([[tx,ty-4],[tx+3,ty+2],[tx-3,ty+2]],k(255,69,0));
+ else if(dec==="prismatica")ci(tx,ty,5,[RED,GREEN,CYAN,YELLOW,PURPLE][Math.floor(now()/150)%5]);
+ else if(dec==="nucleo_cristal"){pg([[tx,ty-6],[tx+4,ty],[tx,ty+6],[tx-4,ty]],k(200,50,255));ci(tx,ty,2,WHITE)}
+ else if(dec==="sombra_abissal"){ci(tx,ty,4,k(50,0,80));ci(tx,ty,2,RED)}
+ else if(dec==="vazio_hadal"){ci(tx,ty,5,k(150,0,255));ci(tx,ty,2,BLACK)}
+ else if(dec==="esqueleto_maldito"){ci(tx,ty,5,WHITE);ci(tx,ty,2,GRAY)}
+ else if(dec==="ceifador_almas"){g.beginPath();g.arc(tx-2,ty-4,8,Math.PI,Math.PI*2);g.strokeStyle=k(220,20,60);g.lineWidth=3;g.stroke();pg([[tx,ty-4],[tx+6,ty-10],[tx-2,ty-8]],k(30,30,35));ci(tx,ty,3,RED)}
+ else if(dec==="masterline"){ci(tx,ty,6,WHITE);ci(tx,ty,3,k(255,0,255))}}
+
+function drawWorld(){
+ g.fillStyle=OCEAN;g.fillRect(0,0,SW,SH);
+ if(weather==="Eclipse"&&eclZone){
+  const z=cr(eclZone);rb(z,10,null,k(200,0,0),6);rb(inf(z,-8,-8),8,null,k(100,0,0),2);
+  ln(z.x,z.y,z.x+40,z.y,RED,4);ln(z.x,z.y,z.x,z.y+40,RED,4);T("ZONA DIVINA DO ECLIPSE (400x400)",z.x+z.w/2,z.y+15,RED,21,"center")}
+ for(const isl of Object.values(ISL)){
+  const r=cr(isl.rect);rb(inf(r,30,30),16,isl.border);rb(r,12,isl.color);
+  T(isl.name,r.x+r.w/2,r.y+15,WHITE,27,"center");
+  for(const l of Object.values(isl.lakes)){const lc=cr(l.rect);rb(inf(lc,16,16),10,SAND);rb(lc,8,l.color);T(`${l.name} (Lvl ${l.req_level})`,lc.x+lc.w/2,lc.y-20,WHITE,17,"center")}
+  const npc=(rc,col,label,tc)=>{const c=cr(rc);rb(c,8,col);ci(c.x+c.w/2,c.y+12,10,k(255,220,177));T(label,c.x+c.w/2,c.y-16,tc,14,"center")};
+  npc(isl.vendor,k(142,68,173),"VENDEDOR",WHITE);npc(isl.rodnpc,GOLD,"VARAS",BLACK);if(isl.boat)npc(isl.boat,CYAN,"BARCOS",BLACK)}
+ drawPlayer();
+ for(const q of particles)ci(q.x+cam.x,q.y+cam.y,q.s,q.c);
+ for(const q of ftexts)T(q.t,q.x+cam.x,q.y+cam.y,q.c,21,"center")}
+
+function drawHints(){
+ if(now()<eclMsg)T("Um Ser Divino Subiu a superficie do Oceano",SW/2,85,k(255,30,30),34,"center");
+ if(state==="EXPLORING"){
+  const pr=pRect();
+  if(weather==="Eclipse"&&eclZone&&hit(pr,eclZone))T("Pressione [AÇÃO] para Pescar no Feixe Divino do Eclipse!",SW/2,135,RED,21,"center");
+  for(const isl of Object.values(ISL)){
+   for(const l of Object.values(isl.lakes))if(hit(pr,inf(l.rect,20,20)))T(`Pressione [AÇÃO] para pescar em ${l.name}`,SW/2,65,YELLOW,21,"center");
+   if(hit(pr,inf(isl.vendor,20,20)))T("[AÇÃO] Vender Peixes do Inventário",SW/2,65,GOLD,21,"center");
+   else if(hit(pr,inf(isl.rodnpc,20,20)))T("[AÇÃO] Abrir Loja de Varas desta Ilha",SW/2,65,WHITE,21,"center");
+   else if(isl.boat&&hit(pr,inf(isl.boat,20,20)))T("[AÇÃO] Abrir Loja de Barcos",SW/2,65,CYAN,21,"center")}
+ }else if(state==="WAITING_BITES")T("Aguardando o peixe fisgar...",SW/2,65,WHITE,21,"center")}
+
+function drawMini(){
+ const px=SW/2-240,py=SH/2-120;rr(px,py,480,240,12,DGRAY,WHITE,3);
+ T("SEGURE [AÇÃO] PARA MANTER!",SW/2,py+18,WHITE,27,"center");
+ const tx=SW/2-TW/2,ty=py+80,bs=rodData(p.rod).bar_size;
+ rr(tx,ty,TW,32,6,BLACK);rr(tx+barPos,ty,bs,32,6,WHITE);
+ if(curFish)ci(tx+fishPos,ty+16,12,curFish.color);
+ rr(tx,py+135,TW,18,4,BLACK);rr(tx,py+135,TW*progress/100,18,4,k(52,152,219));
+ T(`CAPTUROU: ${Math.floor(progress)}%`,SW/2,py+162,WHITE,17,"center");
+ if(curFish){const m={"Lendário":"-30%","Mítico":"-60%","SECRETO":"-70%","Divina":"-75%"}[curFish.rarity]||"0%";T(`${m} de Velocidade de Progresso`,SW/2,py+192,GRAY,17,"center")}}
+
+function drawResult(){
+ const x=SW/2-200,y=SH/2-120;rr(x,y,400,230,12,DGRAY,WHITE,3);
+ if(caught){
+  T("PEIXE CAPTURADO!",SW/2,y+15,GOLD,27,"center");T(caught.name,SW/2,y+45,WHITE,21,"center");
+  const v=variant(caught);if(v)T(v,SW/2,y+72,YELLOW,17,"center");
+  T(`Raridade: ${caught.rarity}`,SW/2,y+98,caught.color,21,"center");
+  T(`Valor: C$ ${caught.price}  |  Peso: ${caught.weight}kg`,SW/2,y+130,WHITE,17,"center");
+  if(perfect)T("CAPTURA PERFEITA! (XP x1.5)",SW/2,y+155,GREEN,17,"center");
+ }else T("O PEIXE ESCAPOU!",SW/2,y+70,RED,27,"center");
+ T("Clique ou toque para fechar",SW/2,y+195,GRAY,17,"center")}
+
+function drawHud(){
+ g.fillStyle=DGRAY;g.fillRect(0,0,SW,50);ln(0,50,SW,50,GOLD,2);
+ T(`Nível ${p.level}`,15,12,CYAN,21);rr(110,18,120,14,4,BLACK);rr(110,18,Math.min(120,120*p.xp/p.xpNext),14,4,CYAN);
+ T(`C$ ${p.coins}`,250,12,GOLD,21);
+ const w=WEATHER[weather];T(`Clima: ${weather} (${w.luck}x)`,370,15,w.color,17);
+ const stock=p.bait!=="minhoca"?`(${p.baits[p.bait]})`:"";
+ T(`Vara: ${rodData(p.rod).name} | Barco: ${BOATS[p.boat].name} | Isca: ${BAITS[p.bait].name} ${stock}`,570,18,WHITE,14);
+ rb(btnInv,6,k(50,50,70),GOLD);TC(`INVENTÁRIO (${p.inv.length})`,btnInv.x+btnInv.w/2,btnInv.y+btnInv.h/2,WHITE,15);
+ rb(btnBest,6,k(50,50,70),CYAN);TC("BESTIÁRIO",btnBest.x+btnBest.w/2,btnBest.y+btnBest.h/2,WHITE,16)}
+
+function closeBtn(x,y){rr(x,y,30,30,6,RED);TC("X",x+15,y+15,WHITE,21)}
+function drawShop(){
+ const sx=SW/2-280,sy=SH/2-250;rr(sx,sy,560,500,12,DGRAY,GOLD,3);closeBtn(sx+515,sy+10);
+ const row=(y,h,bg,label,lc,btnCol,btnTxt,fs=17)=>{rr(sx+20,y,520,h,6,bg);T(label,sx+30,y+10,lc,fs);rr(sx+400,y+5,130,h-10,4,btnCol);TC(btnTxt,sx+465,y+h/2,WHITE,16)};
+ if(shopType==="rod"){
+  const isl=ISL[shopIsl];T(`LOJA DE VARAS - ${isl.name.toUpperCase()}`,SW/2,sy+15,GOLD,27,"center");
+  let y=sy+65;
+  for(const[key,r]of Object.entries(isl.rods)){
+   const un=p.rods.includes(key),eq=p.rod===key;
+   row(y,40,k(50,50,60),`${r.name} (Res: ${r.resilience}) - Sorte: ${r.luck}x`,WHITE,eq?GOLD:un?k(0,180,100):k(180,100,0),eq?"EQUIPADA":un?"EQUIPAR":`C$ ${r.price}`);y+=50}
+  if(p.rods.includes("masterline")){const eq=p.rod==="masterline";row(y,40,k(80,20,80),"VARA MASTERLINE (Res: 77, 33.3x Sorte)",k(255,100,255),eq?GOLD:PURPLE,eq?"EQUIPADA":"EQUIPAR");y+=50}
+  y+=10;T("ISCAS ESPECIAIS:",sx+20,y,CYAN,21);y+=30;
+  for(const[key,b]of Object.entries(BAITS)){if(key==="minhoca")continue;row(y,40,k(50,50,60),`${b.name} (+${b.pack}x) - Possui: ${p.baits[key]}`,WHITE,k(0,150,200),`Comprar C$ ${b.price}`);y+=50}
+ }else{
+  T("LOJA DE BARCOS E NAVEGAÇÃO",SW/2,sy+15,CYAN,27,"center");let y=sy+80;
+  for(const[key,b]of Object.entries(BOATS)){
+   const un=p.boats.includes(key),eq=p.boat===key;
+   row(y,45,k(50,50,60),`${b.name} (Velocidade ${b.speed}x)`,WHITE,eq?GOLD:un?k(0,180,100):ORANGE,eq?"EQUIPADO":un?"USAR":`C$ ${b.price}`,21);y+=55}}
+ T("Pressione [ESC] para sair",SW/2,sy+470,GRAY,17,"center")}
+
+function drawInv(){
+ const ix=SW/2-230,iy=SH/2-200;rr(ix,iy,460,400,12,DGRAY,GOLD,3);closeBtn(ix+420,iy+10);
+ T("INVENTÁRIO DE PEIXES",SW/2,iy+18,GOLD,27,"center");
+ T(`Itens: ${p.inv.length} | Valor Total: C$ ${p.inv.reduce((a,f)=>a+f.price,0)}`,SW/2,iy+55,WHITE,17,"center");
+ favBtns=[];let y=iy+95;
+ if(!p.inv.length)T("Nenhum peixe no inventário!",SW/2,y+40,GRAY,21,"center");
+ else{
+  invScroll=Math.max(0,Math.min(invMax(),invScroll));
+  for(const f of p.inv.slice(invScroll,invScroll+9)){
+   const v=variant(f);let s=`• ${f.name}${v?" "+v:""} (${f.weight}kg) C$${f.price}`;
+   g.font="14px Arial,sans-serif";if(g.measureText(s).width>370)s=`• ${f.name.slice(0,8)}...${v?" "+v:""} (${f.weight}kg) C$${f.price}`;
+   T(s,ix+25,y+4,f.color,14);
+   const cx=ix+425,cy=y+11;ci(cx,cy,8,f.favorited?YELLOW:k(180,180,180));ci(cx,cy,8,null,BLACK,1);
+   favBtns.push([f,R(cx-14,cy-14,28,28)]);y+=28}
+  if(p.inv.length>9)T(`Arraste ou use setas/roda (${invScroll+1}/${invMax()+1})`,SW/2,iy+342,GRAY,14,"center")}
+ T("Pressione [ESC] para fechar",SW/2,iy+365,GRAY,17,"center")}
+
+function drawBest(){
+ const bx=SW/2-380,by=SH/2-230,bw=760,bh=460;rr(bx,by,bw,bh,12,DGRAY,CYAN,3);closeBtn(bx+bw-40,by+10);
+ const keys2=Object.keys(ISL),total=keys2.length+1;bestPage=Math.max(0,Math.min(bestPage,total-1));
+ let page=[];
+ if(bestPage<keys2.length){
+  const isl=ISL[keys2[bestPage]];T(`BESTIÁRIO - ${isl.name.toUpperCase()}`,SW/2,by+18,CYAN,27,"center");
+  for(const l of Object.values(isl.lakes))for(const a of Object.values(l.fish))for(const n of a)if(!page.includes(n))page.push(n);
+ }else{T("BESTIÁRIO - EVENTO ECLIPSE",SW/2,by+18,RED,27,"center");page=["Eclipse Ancient Serpent"]}
+ T(`Total Descoberto: ${Object.keys(p.best).length} / ${allSpecies().size}`,bx+25,by+58,WHITE,14);
+ const per=Math.ceil(page.length/2)||1;
+ page.forEach((sp,i)=>{
+  const cx=bx+20+Math.floor(i/per)*(bw/2),cy=by+90+(i%per)*26;
+  if(sp in p.best){const d=p.best[sp];let r=d.rarity;if(!RI[r])r=findRarity(sp);T(`✔ ${sp} [${r.slice(0,3)}] - ${d.caught}x | ${d.max_weight}kg`,cx,cy,RI[r].color,14)}
+  else T(`❓ ${sp} (Não descoberto)`,cx,cy,GRAY,14)});
+ rr(bx+20,by+bh-40,110,30,6,k(60,60,80));TC("◄ Anterior",bx+75,by+bh-25,WHITE,14);
+ rr(bx+bw-130,by+bh-40,110,30,6,k(60,60,80));TC("Próximo ►",bx+bw-75,by+bh-25,WHITE,14);
+ T(`Página ${bestPage+1} / ${total}`,SW/2,by+bh-32,WHITE,14,"center")}
+
+function drawControls(){
+ ci(joy.c[0],joy.c[1],joy.r,DGRAY);ci(joy.c[0],joy.c[1],joy.r,null,GRAY,2);
+ ci(joy.pos[0],joy.pos[1],joy.hr,WHITE);ci(joy.pos[0],joy.pos[1],joy.hr,null,GOLD,2);
+ el(btnAction.x,btnAction.y,btnAction.w,btnAction.h,touchAction?k(211,84,0):ORANGE);el(btnAction.x,btnAction.y,btnAction.w,btnAction.h,null,WHITE,3);
+ TC("AÇÃO",btnAction.x+btnAction.w/2,btnAction.y+btnAction.h/2,WHITE,17)}
+
+function drawMenu(){
+ g.fillStyle=BLACK;g.fillRect(0,0,SW,SH);T("Fisch",SW/2,185,WHITE,90,"center",1);
+ rb(btnPlay,10,pt(btnPlay,hover)?k(60,60,70):k(35,35,45),WHITE,2);TC("Jogar",btnPlay.x+110,btnPlay.y+33,WHITE,40);
+ T("WASD / Setas: mover  |  Espaço: ação (segure no minigame)  |  E: inventário  |  B: bestiário",SW/2,520,GRAY,17,"center")}
+
+function draw(){
+ if(state==="MENU"){drawMenu();return}
+ drawWorld();drawHints();
+ if(state==="MINIGAME")drawMini();
+ if(state==="RESULT")drawResult();
+ if(state==="SHOP")drawShop();
+ if(state==="INVENTORY")drawInv();
+ if(state==="BESTIARY")drawBest();
+ drawHud();drawControls();
+ if(now()<toastTimer){const b=R(SW/2-250,SH-75,500,42);rb(b,8,DGRAY,GOLD,2);TC(toastMsg,SW/2,b.y+21,WHITE,17)}}
+
+load();
+let last=performance.now(),acc=0;const STEP=1000/30;
+function frame(t){acc=Math.min(acc+(t-last),200);last=t;while(acc>=STEP){tick();acc-=STEP}draw();requestAnimationFrame(frame)}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
